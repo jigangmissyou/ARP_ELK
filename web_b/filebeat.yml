@@ -1,0 +1,16 @@
+filebeat.inputs:
+  - type: log
+    paths:
+      - /var/log/wp_web_b/debug.log  # 容器内部路径
+    multiline.pattern: '^\['
+    multiline.negate: true
+    multiline.match: after
+    exclude_files: ['\.gz$']
+    processors:
+      - add_docker_metadata: ~  # 替换为 add_docker_metadata
+
+output.logstash:
+  hosts: ["logstash:6000"]  # 确保指向 logstash 服务的地址
+
+setup.kibana:
+  host: "http://kibana:5601"  # 指向 Kibana 服务

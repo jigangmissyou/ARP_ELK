@@ -89,19 +89,90 @@ services:
       restart_policy:
         condition: on-failure
 
-  filebeat:
+  # filebeat:
+  #   image: docker.elastic.co/beats/filebeat:7.14.0
+  #   user: root
+  #   command: filebeat -e -strict.perms=false
+  #   volumes:
+  #     - /var/lib/docker/containers:/var/lib/docker/containers:ro
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #     - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+  #     - ./web_a/wp-content/debug.log:/var/log/wp_web_a/debug.log:ro  # 挂载 WordPress 日志
+
+  #   depends_on:
+  #     - wp_web_a
+  #     - db_web_a
+  #   networks:
+  #     - elk
+  #   deploy:
+  #     replicas: 1
+  #     restart_policy:
+  #       condition: on-failure
+  # WordPress 网站 B
+  wp_web_b:
+    image: wordpress:latest
+    environment:
+      WORDPRESS_DB_HOST: db_web_b
+      WORDPRESS_DB_USER: user_b
+      WORDPRESS_DB_PASSWORD: pass_b
+      WORDPRESS_DB_NAME: web_b
+    volumes:
+      - ./web_b/wp-content:/var/www/html/wp-content
+    ports:
+      - "8082:80"
+    networks:
+      - elk
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  # 数据库 B
+  db_web_b:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: root_b
+      MYSQL_DATABASE: web_b
+      MYSQL_USER: user_b
+      MYSQL_PASSWORD: pass_b
+    volumes:
+      - db_data_web_b:/var/lib/mysql
+    networks:
+      - elk
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  # Filebeat 服务A，负责收集 wp_web_a 的日志
+  filebeat_a:
     image: docker.elastic.co/beats/filebeat:7.14.0
     user: root
     command: filebeat -e -strict.perms=false
     volumes:
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./web_a/wp-content/debug.log:/var/log/wp_web_a/debug.log:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
-      - ./web_a/wp-content/debug.log:/var/log/wp_web_a/debug.log:ro  # 挂载 WordPress 日志
-
+      - ./web_a/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
     depends_on:
       - wp_web_a
-      - db_web_a
+    networks:
+      - elk
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  # Filebeat 服务B，负责收集 wp_web_b 的日志（假设有另一个站点）
+  filebeat_b:
+    image: docker.elastic.co/beats/filebeat:7.14.0
+    user: root
+    command: filebeat -e -strict.perms=false
+    volumes:
+      - ./web_b/wp-content/debug.log:/var/log/wp_web_b/debug.log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./web_b/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+    depends_on:
+      - wp_web_b
     networks:
       - elk
     deploy:
@@ -116,3 +187,4 @@ networks:
 volumes:
   esdata:
   db_data_web_a:
+  db_data_web_b:
