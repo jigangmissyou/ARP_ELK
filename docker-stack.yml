@@ -1,0 +1,118 @@
+version: "3.7"
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.14.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - elk
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.14.0
+    volumes:
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+    ports:
+      - "6000:6000"
+      - "9600:9600"
+    networks:
+      - elk
+    depends_on:
+      - elasticsearch
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.14.0
+    environment:
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    networks:
+      - elk
+    depends_on:
+      - elasticsearch
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  wp_web_a:
+    image: wordpress:latest
+    environment:
+      WORDPRESS_DB_HOST: db_web_a
+      WORDPRESS_DB_USER: user_a
+      WORDPRESS_DB_PASSWORD: pass_a
+      WORDPRESS_DB_NAME: web_a
+    volumes:
+      - ./web_a/wp-content:/var/www/html/wp-content
+    ports:
+      - "8081:80"
+    networks:
+      - elk
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  db_web_a:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: root_a
+      MYSQL_DATABASE: web_a
+      MYSQL_USER: user_a
+      MYSQL_PASSWORD: pass_a
+    volumes:
+      - db_data_web_a:/var/lib/mysql
+    networks:
+      - elk
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:7.14.0
+    user: root
+    command: filebeat -e -strict.perms=false
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ./web_a/wp-content/debug.log:/var/log/wp_web_a/debug.log:ro  # 挂载 WordPress 日志
+
+    depends_on:
+      - wp_web_a
+      - db_web_a
+    networks:
+      - elk
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+networks:
+  elk:
+    driver: overlay
+
+volumes:
+  esdata:
+  db_data_web_a:
